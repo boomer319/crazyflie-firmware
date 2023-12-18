@@ -32,6 +32,16 @@
 #include "collision_avoidance.h"
 #include "peer_localization.h"
 
+// ***obstacle avoidance***
+
+// Needed to receive the yaw_approx_obstacle (yaw of where the obstacle
+// could be relative to the crazyflies heading)
+
+#define DEBUG_MODULE "COLAV"
+#include "debug.h"
+#include "../../../app_obstacle_avoidance_by_imitating_cf/src/obstacle_avoidance.h"
+
+// ***obstacle avoidance***
 
 // See header for API comments.
 
@@ -304,6 +314,14 @@ static float workspace[7 * MAX_CELL_ROWS];
 // Latency counter for logging.
 static uint32_t latency = 0;
 
+// ***obstacle avoidance***
+// Make the position of the obstacle static
+// so it is remembered till the next one is recognised
+static float obstacle_pos_x;
+static float obstacle_pos_y;
+static float obstacle_pos_z;
+// ***obstacle avoidance***
+
 void collisionAvoidanceUpdateSetpoint(
   setpoint_t *setpoint, sensorData_t const *sensorData, state_t const *state, stabilizerStep_t stabilizerStep)
 {
@@ -319,7 +337,46 @@ void collisionAvoidanceUpdateSetpoint(
 
   for (int i = 0; i < PEER_LOCALIZATION_MAX_NEIGHBORS; ++i) {
 
+    // ***obstacle avoidance***
+
+    // obstacle_trigger and obstacle_trigger_new_pos
+    // are shared variables between this script and obstacle_avoidance.c
+
+    if (i == 8) { // hardcoded for a swarm of 8 drones (obstacle is the 8th crazyflie)
+
+      if (obstacle_trigger != 0) {
+
+        DEBUG_PRINT("o_t!= 0");
+
+        // Get position of the crazyflie itself
+        struct vec const cfPos = vec2svec(state->position);
+
+        if (obstacle_trigger_new_pos != 0) {
+
+          // Calculate the position of the obstacle
+          obstacle_pos_x = cfPos.x + calculatedVector.x;
+          obstacle_pos_y = cfPos.y + calculatedVector.y;
+          obstacle_pos_z = cfPos.z;
+          DEBUG_PRINT("obstacle_pos_x: %f\n", (double)obstacle_pos_x);
+          DEBUG_PRINT("obstacle_pos_y: %f\n", (double)obstacle_pos_y);
+
+          obstacle_trigger_new_pos = 0;
+        }
+        workspace[3 * nOthers + 0] = obstacle_pos_x;
+        workspace[3 * nOthers + 1] = obstacle_pos_y;
+        workspace[3 * nOthers + 2] = obstacle_pos_z;
+        ++nOthers;
+
+        continue;
+      }
+      continue;
+    }
+
+    // ***obstacle avoidance***
+
     peerLocalizationOtherPosition_t const *otherPos = peerLocalizationGetPositionByIdx(i);
+
+    // DEBUG_PRINT("otherPos.x = %f\n", (double)(otherPos->pos.x));
 
     if (otherPos == NULL || otherPos->id == 0) {
       continue;
